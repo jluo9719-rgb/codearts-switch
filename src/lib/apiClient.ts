@@ -13,6 +13,7 @@ import type {
   SwitchPreviewResponse,
   SwitchProfilesState,
   SwitchRestoreResponse,
+  UpdateCheckResponse,
 } from '../types';
 
 export class ApiError extends Error {
@@ -245,4 +246,6 @@ export const adminApi = {
       method: 'POST',
       body: { url },
     }),
+
+  checkUpdate: () => adminFetch<UpdateCheckResponse>('/admin/api/switch/update-check'),
 };

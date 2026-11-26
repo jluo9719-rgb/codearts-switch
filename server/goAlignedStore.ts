@@ -556,6 +556,9 @@ class GoAlignedStore {
       if (patch.authMode === 'desktop-direct' || patch.authMode === 'env-key') {
         cx.authMode = patch.authMode;
       }
+      if (typeof patch.fallbackUnknownModel === 'boolean') {
+        cx.fallbackUnknownModel = patch.fallbackUnknownModel;
+      }
     } else {
       const d = this.state.switch_profiles.dsh;
       if (typeof patch.model === 'string') d.model = sanitizeModelId(patch.model);

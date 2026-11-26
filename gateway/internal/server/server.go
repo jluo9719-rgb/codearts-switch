@@ -44,6 +44,9 @@ type Server struct {
 	// 积分额度缓存：额度查询是真实上游请求，切页签 / 连续刷新时没必要每次都打。
 	creditMu    sync.Mutex
 	creditCache map[string]creditCacheEntry
+
+	// Version 为构建时注入的软件版本号（用于更新检测）
+	Version string
 }
 
 // New 构造服务。

@@ -32,10 +32,21 @@ type ClaudeProfile struct {
 }
 
 type CodexProfile struct {
-	Model          string `json:"model"`
-	WireAPI        string `json:"wireApi"`
-	ApprovalPolicy string `json:"approvalPolicy"`
-	AuthMode       string `json:"authMode,omitempty"`
+	Model                string `json:"model"`
+	WireAPI              string `json:"wireApi"`
+	ApprovalPolicy       string `json:"approvalPolicy"`
+	AuthMode             string `json:"authMode,omitempty"`
+	FallbackUnknownModel *bool  `json:"fallbackUnknownModel,omitempty"`
+}
+
+// ShouldFallbackUnknownModel reports whether unknown OpenAI/Codex Desktop model slugs
+// (e.g. gpt-6.2-sol, gpt-5.6-sol) should automatically route to CodexProfile.Model.
+// Defaults to true when omitted so Codex Desktop works out-of-the-box without global force_model.
+func (c CodexProfile) ShouldFallbackUnknownModel() bool {
+	if c.FallbackUnknownModel == nil {
+		return true
+	}
+	return *c.FallbackUnknownModel
 }
 
 type DSHProfile struct {
@@ -146,6 +157,8 @@ var (
 	reTomlKV        = regexp.MustCompile(`^([a-zA-Z0-9_-]+)\s*=`)
 )
 
+func boolPtr(v bool) *bool { return &v }
+
 func DefaultProfiles() ProfilesState {
 	return ProfilesState{
 		Claude: ClaudeProfile{
@@ -155,10 +168,11 @@ func DefaultProfiles() ProfilesState {
 			HaikuModel:   "deepseek-v4.1-flash",
 		},
 		Codex: CodexProfile{
-			Model:          "glm-5.3",
-			WireAPI:        "responses",
-			ApprovalPolicy: "on-request",
-			AuthMode:       "desktop-direct",
+			Model:                "glm-5.3",
+			WireAPI:              "responses",
+			ApprovalPolicy:       "on-request",
+			AuthMode:             "desktop-direct",
+			FallbackUnknownModel: boolPtr(true),
 		},
 		DSH: DSHProfile{
 			Model:             "deepseek-v4.1-flash",
@@ -166,6 +180,69 @@ func DefaultProfiles() ProfilesState {
 			TelemetryDisabled: true,
 		},
 	}
+}
+
+// LoadProfiles reads persisted switch-profiles.json from dataDir, merging onto defaults.
+func LoadProfiles(dataDir string) ProfilesState {
+	def := DefaultProfiles()
+	if strings.TrimSpace(dataDir) == "" {
+		return def
+	}
+	b, err := os.ReadFile(filepath.Join(dataDir, "switch-profiles.json"))
+	if err != nil || len(b) == 0 {
+		return def
+	}
+	var loaded ProfilesState
+	if err := json.Unmarshal(b, &loaded); err != nil {
+		return def
+	}
+	if loaded.Claude.PrimaryModel != "" {
+		def.Claude.PrimaryModel = SanitizeModel(loaded.Claude.PrimaryModel, def.Claude.PrimaryModel)
+	}
+	if loaded.Claude.SonnetModel != "" {
+		def.Claude.SonnetModel = SanitizeModel(loaded.Claude.SonnetModel, def.Claude.SonnetModel)
+	}
+	if loaded.Claude.OpusModel != "" {
+		def.Claude.OpusModel = SanitizeModel(loaded.Claude.OpusModel, def.Claude.OpusModel)
+	}
+	if loaded.Claude.HaikuModel != "" {
+		def.Claude.HaikuModel = SanitizeModel(loaded.Claude.HaikuModel, def.Claude.HaikuModel)
+	}
+	if loaded.Codex.Model != "" {
+		def.Codex.Model = SanitizeModel(loaded.Codex.Model, def.Codex.Model)
+	}
+	if loaded.Codex.WireAPI == "responses" || loaded.Codex.WireAPI == "chat" {
+		def.Codex.WireAPI = loaded.Codex.WireAPI
+	}
+	if loaded.Codex.ApprovalPolicy != "" {
+		def.Codex.ApprovalPolicy = loaded.Codex.ApprovalPolicy
+	}
+	if loaded.Codex.AuthMode == "desktop-direct" || loaded.Codex.AuthMode == "env-key" {
+		def.Codex.AuthMode = loaded.Codex.AuthMode
+	}
+	if loaded.Codex.FallbackUnknownModel != nil {
+		def.Codex.FallbackUnknownModel = boolPtr(*loaded.Codex.FallbackUnknownModel)
+	}
+	if loaded.DSH.Model != "" {
+		def.DSH.Model = SanitizeModel(loaded.DSH.Model, def.DSH.Model)
+	}
+	if loaded.DSH.FallbackModel != "" {
+		def.DSH.FallbackModel = SanitizeModel(loaded.DSH.FallbackModel, def.DSH.FallbackModel)
+	}
+	def.DSH.TelemetryDisabled = loaded.DSH.TelemetryDisabled
+	return def
+}
+
+// SaveProfiles atomically persists switch-profiles.json in dataDir so Codex/Claude choices survive restarts.
+func SaveProfiles(dataDir string, p ProfilesState) error {
+	if strings.TrimSpace(dataDir) == "" {
+		return nil
+	}
+	b, err := json.MarshalIndent(p, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeAtomic(filepath.Join(dataDir, "switch-profiles.json"), string(b)+"\n", false)
 }
 
 func SanitizeModel(val, fallback string) string {

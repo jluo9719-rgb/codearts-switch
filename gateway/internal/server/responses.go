@@ -27,8 +27,31 @@ func (s *Server) handleCodexResponses(w http.ResponseWriter, r *http.Request) {
 	}
 
 	model, _ := body["model"].(string)
-	if strings.TrimSpace(model) == "" {
-		model = s.Store.Settings().DefaultModel
+	model = strings.TrimSpace(model)
+	settings := s.Store.Settings()
+	if model == "" {
+		codexProfile := s.getSwitchProfiles().Codex
+		if codexProfile.Model != "" {
+			model = codexProfile.Model
+		} else {
+			model = settings.DefaultModel
+		}
+	} else if settings.ForceModel == "" {
+		// If Codex Desktop sends a built-in OpenAI slug (e.g. gpt-6.2-sol, gpt-5.6-sol) that is not
+		// a CodeArts model or explicit alias, transparently route it to the user's selected Codex
+		// CodeArts model without requiring global force_model (keeping Claude Code / DSH isolated).
+		if _, ok := s.Reg.Resolve(model, settings.ModelAliases); !ok {
+			codexProfile := s.getSwitchProfiles().Codex
+			if codexProfile.ShouldFallbackUnknownModel() {
+				fallback := strings.TrimSpace(codexProfile.Model)
+				if fallback == "" {
+					fallback = settings.DefaultModel
+				}
+				if fallback != "" {
+					model = fallback
+				}
+			}
+		}
 	}
 	stream, _ := body["stream"].(bool)
 

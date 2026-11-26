@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { adminApi } from '../lib/apiClient';
 import { DEFAULT_SWITCH_PROFILES } from '../lib/switcherEngine';
+import { formatDateTimeCN } from '../lib/timeFormat';
 import type {
   AdminModel,
   SwitchAgentDetection,
@@ -412,7 +413,7 @@ export const AgentSwitcherView: React.FC<AgentSwitcherViewProps> = ({ models, on
                 }
                 className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-mono"
               >
-                <option value="responses">responses（桌面软件推荐）</option>
+                <option value="responses">responses（桌面推荐）</option>
                 <option value="chat">chat（兼容模式）</option>
               </select>
             </div>
@@ -458,6 +459,28 @@ export const AgentSwitcherView: React.FC<AgentSwitcherViewProps> = ({ models, on
                 <option value="desktop-direct">桌面软件直连（推荐）</option>
                 <option value="env-key">环境变量 env_key（CLI）</option>
               </select>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 px-4 py-3">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  id="codex-fallback-unknown"
+                  type="checkbox"
+                  checked={profiles.codex.fallbackUnknownModel !== false}
+                  onChange={(e) =>
+                    void handleUpdateCodex({ fallbackUnknownModel: e.target.checked })
+                  }
+                  className="mt-0.5 rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500"
+                />
+                <div className="text-xs leading-relaxed">
+                  <div className="font-medium text-slate-900 dark:text-slate-100">
+                    Codex 桌面端未知模型自动映射到当前码道模型（推荐，无需开启全局强制）
+                  </div>
+                  <div className="text-slate-500 dark:text-slate-400 mt-0.5">
+                    当 Codex 桌面软件发送内置模型名（如 <code className="font-mono">gpt-6.2-sol</code>、<code className="font-mono">gpt-5.6-sol</code>）时，<code className="font-mono">/v1/responses</code> 自动路由至当前选定的{' '}
+                    <code className="font-mono text-slate-700 dark:text-slate-200">{profiles.codex.model}</code>，完全不影响 Claude Code 与 DeepSeek Harness。
+                  </div>
+                </div>
+              </label>
             </div>
           </div>
         )}
@@ -797,7 +820,7 @@ export const AgentSwitcherView: React.FC<AgentSwitcherViewProps> = ({ models, on
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
               <div className="text-xs text-slate-500 dark:text-slate-400">
                 {activeDetection?.hasBackup && activeDetection.lastBackupAt
-                  ? `最近快照时间：${new Date(activeDetection.lastBackupAt).toLocaleString('zh-CN', { hour12: false })}（共保留 ${activeDetection.backupCount} 份）`
+                  ? `最近快照时间：${formatDateTimeCN(activeDetection.lastBackupAt)}（共保留 ${activeDetection.backupCount} 份）`
                   : '首次写入时将自动保存原始文件快照'}
               </div>
 

@@ -1,7 +1,7 @@
 {
   "name": "codearts-switch",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -10,7 +10,7 @@
     "build:gateway": "node scripts/build-release.mjs gateway",
     "build:desktop": "node scripts/build-release.mjs desktop",
     "preview": "vite preview",
-    "test": "tsx --test src/lib/switcherEngine.test.ts src/lib/protocolAdapter.test.ts",
+    "test": "tsx --test src/lib/switcherEngine.test.ts src/lib/protocolAdapter.test.ts src/lib/timeFormat.test.ts",
     "clean": "node -e \"const fs=require('fs'); for (const p of ['dist','server.js']) fs.rmSync(p,{recursive:true,force:true})\"",
     "lint": "tsc --noEmit"
   },

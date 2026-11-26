@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { adminApi } from '../lib/apiClient';
+import { formatDateTimeCN, formatTimeCN } from '../lib/timeFormat';
 import type { AdminKey, AdminLogEntry, AdminStats } from '../types';
 
 interface LogsKeysViewProps {
@@ -206,7 +207,7 @@ export const LogsKeysView: React.FC<LogsKeysViewProps> = ({
                     {k.requests}
                   </td>
                   <td className="py-3 px-4 text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-                    {new Date(k.created_at).toLocaleString('zh-CN', { hour12: false })}
+                    {formatDateTimeCN(k.created_at)}
                   </td>
                   <td className="py-3 px-4 text-right text-xs">
                     <div className="inline-flex items-center gap-2">
@@ -315,7 +316,7 @@ export const LogsKeysView: React.FC<LogsKeysViewProps> = ({
                       className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
                     >
                       <td className="py-3 px-4 font-mono tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        {ts ? new Date(ts).toLocaleTimeString('zh-CN', { hour12: false }) : '—'}
+                        {formatTimeCN(ts)}
                       </td>
                       <td className="py-3 px-4 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         {item.protocol || item.path || '—'}

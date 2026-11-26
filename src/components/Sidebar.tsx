@@ -18,6 +18,8 @@ interface SidebarProps {
   healthyAccounts: number;
   totalAccounts: number;
   activeKeysCount: number;
+  appVersion: string;
+  hasUpdate: boolean;
   darkMode: boolean;
   onToggleDarkMode: () => void;
 }
@@ -41,6 +43,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   healthyAccounts,
   totalAccounts,
   activeKeysCount,
+  appVersion,
+  hasUpdate,
   darkMode,
   onToggleDarkMode,
 }) => {
@@ -96,6 +100,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
               {activeKeysCount}
             </span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span>当前版本</span>
+            <button
+              type="button"
+              onClick={() => onSelectSection('settings')}
+              className="font-mono tabular-nums text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 inline-flex items-center gap-1"
+            >
+              <span>v{appVersion}</span>
+              {hasUpdate && (
+                <span className="text-[11px] font-sans font-medium text-blue-600 dark:text-blue-400">
+                  · 有新版
+                </span>
+              )}
+            </button>
           </div>
         </div>
 

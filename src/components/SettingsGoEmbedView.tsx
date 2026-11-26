@@ -1,13 +1,31 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Copy, Link2, Lock, Monitor, Package, Save } from 'lucide-react';
+import {
+  ArrowDownToLine,
+  Check,
+  Copy,
+  ExternalLink,
+  Link2,
+  Lock,
+  Monitor,
+  Package,
+  Plus,
+  RefreshCw,
+  Save,
+  Trash2,
+} from 'lucide-react';
 import { adminApi, setAdminPasswordMemory } from '../lib/apiClient';
-import type { AdminModel, AdminSettings, RuntimeMode } from '../types';
+import { formatDateTimeCN } from '../lib/timeFormat';
+import type { AdminModel, AdminSettings, RuntimeMode, UpdateCheckResponse } from '../types';
 
 interface SettingsGoEmbedViewProps {
   settings: AdminSettings;
   models: AdminModel[];
   runtimeMode: RuntimeMode;
   goUpstream: string;
+  updateInfo: UpdateCheckResponse | null;
+  checkingUpdate: boolean;
+  onCheckUpdate: (manual?: boolean) => Promise<void>;
+  onOpenExternalUrl: (url: string) => Promise<void>;
   onConnectGoBridge: (origin: string, autoDetect?: boolean) => Promise<boolean>;
   onRefreshState: () => Promise<void>;
   onNotify: (kind: 'success' | 'error' | 'info', message: string) => void;
@@ -31,12 +49,18 @@ export const SettingsGoEmbedView: React.FC<SettingsGoEmbedViewProps> = ({
   models,
   runtimeMode,
   goUpstream,
+  updateInfo,
+  checkingUpdate,
+  onCheckUpdate,
+  onOpenExternalUrl,
   onConnectGoBridge,
   onRefreshState,
   onNotify,
 }) => {
   const [form, setForm] = useState<AdminSettings>(settings);
   const [newPassword, setNewPassword] = useState('');
+  const [aliasFrom, setAliasFrom] = useState('');
+  const [aliasTo, setAliasTo] = useState('');
   const [saving, setSaving] = useState(false);
   const [copiedCmd, setCopiedCmd] = useState<'tauri' | 'go' | null>(null);
   const [bridgeInput, setBridgeInput] = useState(goUpstream || 'http://127.0.0.1:10087');
@@ -59,6 +83,7 @@ export const SettingsGoEmbedView: React.FC<SettingsGoEmbedViewProps> = ({
       const payload: Partial<AdminSettings> & { admin_password?: string } = {
         default_model: form.default_model,
         force_model: form.force_model,
+        model_aliases: form.model_aliases || {},
         request_timeout_sec: Number(form.request_timeout_sec),
         max_retries: Number(form.max_retries),
         log_keep: Number(form.log_keep),
@@ -71,7 +96,7 @@ export const SettingsGoEmbedView: React.FC<SettingsGoEmbedViewProps> = ({
         allow_anonymous: form.allow_anonymous,
         auto_claim: form.auto_claim,
         write_back_to_ide: form.write_back_to_ide,
-        login_port: Number(form.login_port),
+        login_port: Number(form.login_port) || 0,
       };
       if (newPassword.trim()) {
         payload.admin_password = newPassword.trim();
@@ -250,12 +275,12 @@ export const SettingsGoEmbedView: React.FC<SettingsGoEmbedViewProps> = ({
               htmlFor="setting-login-port"
               className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5"
             >
-              OAuth 回调端口 (login_port)
+              OAuth 回调端口 (login_port，0 为默认自动)
             </label>
             <input
               id="setting-login-port"
               type="number"
-              min={10000}
+              min={0}
               max={65535}
               value={form.login_port}
               onChange={(e) => setForm({ ...form, login_port: Number(e.target.value) })}
@@ -420,7 +445,154 @@ export const SettingsGoEmbedView: React.FC<SettingsGoEmbedViewProps> = ({
             )}
           </div>
         </div>
+
+        {/* Per-model Alias Mapping (for mapping Codex Desktop dropdown entries to distinct CodeArts models) */}
+        <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              自定义模型别名映射 (model_aliases)
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              可选进阶功能：将客户端请求的特定模型名（如 Codex 桌面端的 <code className="font-mono">gpt-6.2-sol</code>、<code className="font-mono">gpt-6.2-astra</code>）分别映射到不同码道模型；新增或删除后点击右上角「保存全部设置」生效。
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={aliasFrom}
+              onChange={(e) => setAliasFrom(e.target.value)}
+              aria-label="客户端请求的模型别名"
+              placeholder="客户端模型名，如 gpt-6.2-sol"
+              className="w-full sm:w-56 px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+            />
+            <span className="text-xs text-slate-400">→</span>
+            <select
+              value={aliasTo || modelIds[0] || ''}
+              onChange={(e) => setAliasTo(e.target.value)}
+              aria-label="映射到的目标码道模型"
+              className="w-full sm:w-56 px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+            >
+              {modelIds.map((id) => (
+                <option key={id} value={id}>
+                  {id}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                const from = aliasFrom.trim();
+                const to = (aliasTo || modelIds[0] || '').trim();
+                if (!from || !to) return;
+                setForm({
+                  ...form,
+                  model_aliases: { ...(form.model_aliases || {}), [from]: to },
+                });
+                setAliasFrom('');
+              }}
+              className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>添加映射</span>
+            </button>
+          </div>
+
+          {Object.keys(form.model_aliases || {}).length > 0 && (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40">
+              {Object.entries(form.model_aliases || {}).map(([from, to]) => (
+                <div
+                  key={from}
+                  className="px-3.5 py-2 flex items-center justify-between gap-3 text-xs font-mono"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-slate-900 dark:text-slate-100 truncate">{from}</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="text-blue-700 dark:text-blue-400 truncate">{to}</span>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={`删除别名 ${from}`}
+                    onClick={() => {
+                      const next = { ...(form.model_aliases || {}) };
+                      delete next[from];
+                      setForm({ ...form, model_aliases: next });
+                    }}
+                    className="text-rose-600 dark:text-rose-400 hover:underline inline-flex items-center gap-1 shrink-0"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>移除</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </form>
+
+      {/* Software Version & GitHub Releases Update Check */}
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <ArrowDownToLine className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+            <div>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                软件版本与更新检查
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                当前版本：<span className="font-mono text-slate-800 dark:text-slate-200">v{updateInfo?.currentVersion || '1.0.1'}</span>
+                {updateInfo?.ok && updateInfo.latestVersion && (
+                  <>
+                    {' '}· GitHub 最新版本：
+                    <span className="font-mono text-slate-800 dark:text-slate-200">
+                      v{updateInfo.latestVersion}
+                    </span>
+                    {updateInfo.publishedAt && (
+                      <> · 发布于 {formatDateTimeCN(updateInfo.publishedAt)}</>
+                    )}
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void onCheckUpdate(true)}
+              disabled={checkingUpdate}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 whitespace-nowrap disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${checkingUpdate ? 'animate-spin' : ''}`} />
+              <span>{checkingUpdate ? '检查中…' : '检查 GitHub 更新'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                void onOpenExternalUrl(
+                  updateInfo?.hasUpdate && updateInfo.downloadUrl
+                    ? updateInfo.downloadUrl
+                    : updateInfo?.releaseUrl ||
+                        'https://github.com/jluo9719-rgb/codearts-switch/releases'
+                )
+              }
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap ${
+                updateInfo?.hasUpdate
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                  : 'border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>{updateInfo?.hasUpdate ? `下载新版 v${updateInfo.latestVersion}` : '打开 Releases 页面'}</span>
+            </button>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+          每次推送代码并在 GitHub Actions 发布新版本标签（如 <code className="font-mono">v1.0.2</code>）后，软件启动时会自动检测并弹出更新横幅；下载新版 <code className="font-mono">-setup.exe</code> 直接覆盖安装即可，你的账号、密钥、设置与快照数据保存在 <code className="font-mono">%APPDATA%\com.codearts.switch\</code>，升级不会丢失任何数据。
+        </p>
+      </section>
 
       {/* Tauri v2 Desktop Client Packaging Kit */}
       <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">

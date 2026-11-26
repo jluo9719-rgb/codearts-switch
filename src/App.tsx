@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Lock, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, Lock, RefreshCw, X } from 'lucide-react';
 import { Sidebar, type NavSection } from './components/Sidebar';
 import { AgentSwitcherView } from './components/AgentSwitcherView';
 import { AccountsCreditsView } from './components/AccountsCreditsView';
@@ -7,7 +7,7 @@ import { ModelsCatalogView } from './components/ModelsCatalogView';
 import { LogsKeysView } from './components/LogsKeysView';
 import { SettingsGoEmbedView } from './components/SettingsGoEmbedView';
 import { adminApi, ApiError, setAdminPasswordMemory } from './lib/apiClient';
-import type { AdminStateResponse } from './types';
+import type { AdminStateResponse, UpdateCheckResponse } from './types';
 
 const SECTION_TITLE: Record<NavSection, string> = {
   agents: '智能体切换',
@@ -29,6 +29,9 @@ export function App() {
     kind: 'success' | 'error' | 'info';
     message: string;
   } | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResponse | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateBannerDismissed, setUpdateBannerDismissed] = useState(false);
 
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -76,9 +79,53 @@ export function App() {
     }
   }, []);
 
+  const handleOpenExternalUrl = useCallback(async (url: string) => {
+    try {
+      await adminApi.openExternalUrl(url);
+    } catch {
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+  }, []);
+
+  const handleCheckUpdate = useCallback(
+    async (manual = false) => {
+      setCheckingUpdate(true);
+      try {
+        const res = await adminApi.checkUpdate();
+        setUpdateInfo(res);
+        if (res.hasUpdate) {
+          setUpdateBannerDismissed(false);
+          if (manual) {
+            notify('info', `发现新版本 v${res.latestVersion}（当前 v${res.currentVersion}），可点击下载覆盖安装。`);
+          }
+        } else if (manual) {
+          if (res.ok) {
+            notify('success', `当前已是最新版本（v${res.currentVersion}）`);
+          } else {
+            notify('info', res.error || '暂时无法连接 GitHub，请稍后重试');
+          }
+        }
+      } catch {
+        if (manual) {
+          notify('error', '检查更新请求失败');
+        }
+      } finally {
+        setCheckingUpdate(false);
+      }
+    },
+    [notify]
+  );
+
   useEffect(() => {
     void loadState(true);
-  }, [loadState]);
+    void handleCheckUpdate(false);
+  }, [loadState, handleCheckUpdate]);
 
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,6 +200,8 @@ export function App() {
         healthyAccounts={healthyAccounts}
         totalAccounts={totalAccounts}
         activeKeysCount={activeKeysCount}
+        appVersion={updateInfo?.currentVersion || '1.0.1'}
+        hasUpdate={Boolean(updateInfo?.hasUpdate)}
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode((prev) => !prev)}
       />
@@ -182,6 +231,40 @@ export function App() {
         </header>
 
         <main className="flex-1 p-6 lg:p-8 max-w-6xl w-full mx-auto space-y-5">
+          {updateInfo?.hasUpdate && !updateBannerDismissed && (
+            <div
+              role="status"
+              className="px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 flex flex-wrap items-center justify-between gap-3 text-xs text-blue-900 dark:text-blue-200"
+            >
+              <div className="flex items-center gap-2">
+                <ArrowDownToLine className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                <span>
+                  发现新版本 <strong className="font-mono">v{updateInfo.latestVersion}</strong>（当前{' '}
+                  <span className="font-mono">v{updateInfo.currentVersion}</span>），下载安装包覆盖安装即可保留全部账号与配置。
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleOpenExternalUrl(updateInfo.downloadUrl || updateInfo.releaseUrl)
+                  }
+                  className="px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium whitespace-nowrap"
+                >
+                  前往下载新版
+                </button>
+                <button
+                  type="button"
+                  aria-label="忽略本次更新提醒"
+                  onClick={() => setUpdateBannerDismissed(true)}
+                  className="p-0.5 opacity-70 hover:opacity-100"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
           {state?.state_warning && (
             <div
               role="alert"
@@ -262,6 +345,10 @@ export function App() {
                   models={state.models}
                   runtimeMode={runtimeMode}
                   goUpstream={goUpstream}
+                  updateInfo={updateInfo}
+                  checkingUpdate={checkingUpdate}
+                  onCheckUpdate={handleCheckUpdate}
+                  onOpenExternalUrl={handleOpenExternalUrl}
                   onConnectGoBridge={handleConnectGoBridge}
                   onRefreshState={() => loadState(false)}
                   onNotify={notify}

@@ -27,7 +27,12 @@ import {
   estimateMixedTokens,
   sanitizeModelId,
 } from './src/lib/switcherEngine';
+import { compareSemver } from './src/lib/timeFormat';
 import type { SwitchAgentId } from './src/types';
+
+const APP_VERSION = '1.0.1';
+const GITHUB_RELEASES_API = 'https://api.github.com/repos/jluo9719-rgb/codearts-switch/releases/latest';
+const GITHUB_RELEASES_PAGE = 'https://github.com/jluo9719-rgb/codearts-switch/releases';
 
 const PORT = Number(process.env.PORT || 3000);
 // Default to 127.0.0.1 locally; bind 0.0.0.0 only inside cloud preview (APP_URL set) or explicit HOST=0.0.0.0
@@ -1330,6 +1335,71 @@ async function createApp() {
     }
   });
 
+  app.get('/admin/api/switch/update-check', withAdminAuth, async (_req, res) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const ghRes = await fetch(GITHUB_RELEASES_API, {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': `CodeArts-Switch/${APP_VERSION}`,
+        },
+        signal: controller.signal,
+      });
+      if (ghRes.status === 404) {
+        res.json({
+          ok: true,
+          currentVersion: APP_VERSION,
+          latestVersion: APP_VERSION,
+          hasUpdate: false,
+          releaseUrl: GITHUB_RELEASES_PAGE,
+        });
+        return;
+      }
+      if (!ghRes.ok) {
+        res.json({
+          ok: false,
+          currentVersion: APP_VERSION,
+          releaseUrl: GITHUB_RELEASES_PAGE,
+          error: `GitHub API 返回状态 ${ghRes.status}`,
+        });
+        return;
+      }
+      const rel = (await ghRes.json()) as {
+        tag_name?: string;
+        html_url?: string;
+        published_at?: string;
+        body?: string;
+        assets?: Array<{ name?: string; browser_download_url?: string }>;
+      };
+      const latest = (rel.tag_name || APP_VERSION).replace(/^v/i, '').trim() || APP_VERSION;
+      const releaseUrl = rel.html_url || GITHUB_RELEASES_PAGE;
+      const setupAsset = (rel.assets || []).find((a) => {
+        const lower = (a.name || '').toLowerCase();
+        return lower.endsWith('-setup.exe') || (lower.endsWith('.exe') && lower.includes('setup'));
+      });
+      res.json({
+        ok: true,
+        currentVersion: APP_VERSION,
+        latestVersion: latest,
+        hasUpdate: compareSemver(APP_VERSION, latest) < 0,
+        releaseUrl,
+        downloadUrl: setupAsset?.browser_download_url || releaseUrl,
+        publishedAt: rel.published_at || '',
+        releaseNotes: rel.body || '',
+      });
+    } catch {
+      res.json({
+        ok: false,
+        currentVersion: APP_VERSION,
+        releaseUrl: GITHUB_RELEASES_PAGE,
+        error: '无法连接 GitHub 检查更新（可手动打开 Releases 页面查看）',
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
   // =========================================================================
   // Gateway Inference Endpoints: /v1/models, /v1/messages/count_tokens,
   // /v1/messages, /v1/responses, /v1/chat/completions
@@ -1510,9 +1580,23 @@ async function createApp() {
     }
     try {
       const body = (req.body || {}) as Record<string, unknown>;
-      const canonical = codexResponsesToCanonical(body, goAlignedStore.getSanitizedSettings().default_model);
+      const settings = goAlignedStore.getSanitizedSettings();
+      const codexProfile = goAlignedStore.getSwitchProfiles().codex;
+      const canonical = codexResponsesToCanonical(
+        body,
+        codexProfile.model || settings.default_model
+      );
+      let resolvedModel = canonical.model;
+      if (!settings.force_model && codexProfile.fallbackUnknownModel !== false) {
+        const knownModels = new Set(goAlignedStore.getModels().map((m) => m.id.toLowerCase()));
+        const aliases = settings.model_aliases || {};
+        const lower = resolvedModel.toLowerCase();
+        if (!knownModels.has(lower) && !aliases[resolvedModel] && !aliases[lower]) {
+          resolvedModel = codexProfile.model || settings.default_model;
+        }
+      }
       const chatPayload: Record<string, unknown> = {
-        model: canonical.model,
+        model: resolvedModel,
         stream: false,
         messages: canonical.messages.map((m) => {
           if (m.role === 'tool') {

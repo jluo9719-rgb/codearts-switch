@@ -99,6 +99,7 @@ func main() {
 	}
 
 	srv := server.New(st)
+	srv.Version = version
 	srv.ApplyIdentity()
 
 	// 后台每日自动领取运营活动福利

@@ -128,6 +128,7 @@ export const DEFAULT_SWITCH_PROFILES: SwitchProfilesState = {
     wireApi: 'responses',
     approvalPolicy: 'on-request',
     authMode: 'desktop-direct',
+    fallbackUnknownModel: true,
   },
   dsh: {
     model: 'DeepSeek-V4.1-Flash',

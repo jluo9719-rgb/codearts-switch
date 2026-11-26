@@ -35,8 +35,8 @@ export interface AdminKey {
   key: string; // masked in list responses (e.g. ca2a-xxxx••••yyyy)
   name: string;
   enabled: boolean;
-  created_at: string;
-  last_used?: string | null;
+  created_at: string | number;
+  last_used?: string | number | null;
   requests: number;
 }
 
@@ -98,8 +98,8 @@ export interface AdminStats {
 
 export interface AdminLogEntry {
   id?: string;
-  at?: string;
-  time?: string;
+  at?: string | number;
+  time?: string | number;
   account?: string;
   model: string;
   protocol?: ProtocolType | string;
@@ -206,6 +206,7 @@ export interface CodexProfileConfig {
   wireApi: 'responses' | 'chat';
   approvalPolicy: 'on-request' | 'untrusted' | 'never';
   authMode?: 'desktop-direct' | 'env-key';
+  fallbackUnknownModel?: boolean;
 }
 
 export interface DshProfileConfig {
@@ -295,4 +296,16 @@ export interface SwitchRestoreResponse {
   agentId: SwitchAgentId;
   restoredFiles: string[];
   message: string;
+}
+
+export interface UpdateCheckResponse {
+  ok: boolean;
+  currentVersion: string;
+  latestVersion?: string;
+  hasUpdate?: boolean;
+  releaseUrl: string;
+  downloadUrl?: string;
+  publishedAt?: string;
+  releaseNotes?: string;
+  error?: string;
 }
