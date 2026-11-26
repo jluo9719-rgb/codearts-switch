@@ -1,0 +1,1 @@
+# Built React frontend assets from ../../dist are copied here by scripts/build-gateway-windows.ps1 or scripts/build-tauri-windows.ps1

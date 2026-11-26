@@ -1,0 +1,6 @@
+{
+  "name": "码道 Switch — CodeArts 智能体网关控制台",
+  "description": "面向华为云码道（CodeArts）模型的一键切换与本地协议网关工具，支持账号绑定、积分签到、模型目录管理，以及 Claude CLI、Codex CLI 与 DeepSeek Harness 一键接入。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

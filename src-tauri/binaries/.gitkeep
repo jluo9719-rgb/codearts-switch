@@ -1,0 +1,2 @@
+# Compiled Go CodeArts2API sidecar binaries are placed here by scripts/build-tauri-windows.ps1
+# Expected filename on Windows x64: codearts-gateway-x86_64-pc-windows-msvc.exe

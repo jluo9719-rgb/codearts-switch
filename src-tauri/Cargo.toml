@@ -1,0 +1,19 @@
+[package]
+name = "codearts-switch"
+version = "1.0.0"
+description = "码道 Switch — CodeArts 智能体网关与零冲突切换客户端"
+authors = ["CodeArts Switch"]
+edition = "2021"
+
+[lib]
+name = "codearts_switch_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
