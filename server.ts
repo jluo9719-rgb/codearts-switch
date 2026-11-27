@@ -30,7 +30,7 @@ import {
 import { compareSemver } from './src/lib/timeFormat';
 import type { SwitchAgentId } from './src/types';
 
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.0.2';
 const GITHUB_RELEASES_API = 'https://api.github.com/repos/jluo9719-rgb/codearts-switch/releases/latest';
 const GITHUB_RELEASES_PAGE = 'https://github.com/jluo9719-rgb/codearts-switch/releases';
 

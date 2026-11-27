@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	defaultAppVersion     = "1.0.1"
+	defaultAppVersion     = "1.0.2"
 	githubReleasesAPIURL  = "https://api.github.com/repos/jluo9719-rgb/codearts-switch/releases/latest"
 	githubReleasesPageURL = "https://github.com/jluo9719-rgb/codearts-switch/releases"
 )

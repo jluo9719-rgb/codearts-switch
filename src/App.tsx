@@ -200,7 +200,7 @@ export function App() {
         healthyAccounts={healthyAccounts}
         totalAccounts={totalAccounts}
         activeKeysCount={activeKeysCount}
-        appVersion={updateInfo?.currentVersion || '1.0.1'}
+        appVersion={updateInfo?.currentVersion || '1.0.2'}
         hasUpdate={Boolean(updateInfo?.hasUpdate)}
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode((prev) => !prev)}

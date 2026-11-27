@@ -179,18 +179,19 @@ type anthropicStream struct {
 	model   string
 	inTok   int
 
-	index    int
-	kind     string // "" / "thinking" / "text" / "tool_use"
-	toolArgs strings.Builder
-	toolID   string
-	toolName string
-	outTok   int
+	index       int
+	kind        string // "" / "thinking" / "text" / "tool_use"
+	toolArgs    strings.Builder
+	toolID      string
+	toolName    string
+	toolCallIdx int
+	outTok      int
 	// sawToolUse 记录是否出现过工具调用，用于决定 stop_reason
 	sawToolUse bool
 }
 
 func newAnthropicStream(w http.ResponseWriter, f http.Flusher, msgID, model string, promptLen int) *anthropicStream {
-	return &anthropicStream{w: w, flusher: f, msgID: msgID, model: model, inTok: promptLen, index: -1}
+	return &anthropicStream{w: w, flusher: f, msgID: msgID, model: model, inTok: promptLen, index: -1, toolCallIdx: -1}
 }
 
 // start 发送 message_start 事件。
@@ -205,7 +206,7 @@ func (a *anthropicStream) start() {
 	})
 }
 
-// openBlock 在需要时切换内容块。
+// openBlock 在需要时切换 thinking / text 内容块。
 func (a *anthropicStream) openBlock(kind string) {
 	if a.kind == kind {
 		return
@@ -219,13 +220,35 @@ func (a *anthropicStream) openBlock(kind string) {
 	switch kind {
 	case "thinking":
 		block = map[string]any{"type": "thinking", "thinking": ""}
-	case "tool_use":
-		block = map[string]any{"type": "tool_use", "id": a.toolID, "name": a.toolName, "input": map[string]any{}}
 	default:
 		block = map[string]any{"type": "text", "text": ""}
 	}
 	a.send("content_block_start", map[string]any{
 		"type": "content_block_start", "index": a.index, "content_block": block,
+	})
+}
+
+// openToolBlock 始终关闭上一个内容块（包括前一个 tool_use），并开启新的 tool_use 块。
+func (a *anthropicStream) openToolBlock(id, name string, idx int) {
+	if a.kind != "" {
+		a.send("content_block_stop", map[string]any{"type": "content_block_stop", "index": a.index})
+	}
+	if id == "" {
+		id = "toolu_" + codearts.RandomHex(8)
+	}
+	a.index++
+	a.kind = "tool_use"
+	a.toolID = id
+	a.toolName = name
+	a.toolCallIdx = idx
+	a.toolArgs.Reset()
+	a.sawToolUse = true
+	a.send("content_block_start", map[string]any{
+		"type":  "content_block_start",
+		"index": a.index,
+		"content_block": map[string]any{
+			"type": "tool_use", "id": a.toolID, "name": a.toolName, "input": map[string]any{},
+		},
 	})
 }
 
@@ -272,13 +295,11 @@ func (a *anthropicStream) consume(chunk []byte) (int, error) {
 			})
 		}
 		for _, tc := range ch.Delta.ToolCalls {
-			if a.kind != "tool_use" || a.toolID != tc.ID {
-				if tc.ID != "" {
-					a.toolID = tc.ID
-					a.toolName = tc.Function.Name
-					a.toolArgs.Reset()
-					a.openBlock("tool_use")
-				}
+			isNewTool := a.kind != "tool_use" ||
+				(tc.ID != "" && tc.ID != a.toolID) ||
+				(tc.ID == "" && tc.Index != a.toolCallIdx)
+			if isNewTool {
+				a.openToolBlock(tc.ID, tc.Function.Name, tc.Index)
 			}
 			if tc.Function.Arguments != "" {
 				a.sawToolUse = true

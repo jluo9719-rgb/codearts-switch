@@ -1,6 +1,6 @@
 [package]
 name = "codearts-switch"
-version = "1.0.1"
+version = "1.0.2"
 description = "码道 Switch — CodeArts 智能体网关与零冲突切换客户端"
 authors = ["CodeArts Switch"]
 edition = "2021"

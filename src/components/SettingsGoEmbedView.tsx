@@ -540,7 +540,7 @@ export const SettingsGoEmbedView: React.FC<SettingsGoEmbedViewProps> = ({
                 软件版本与更新检查
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                当前版本：<span className="font-mono text-slate-800 dark:text-slate-200">v{updateInfo?.currentVersion || '1.0.1'}</span>
+                当前版本：<span className="font-mono text-slate-800 dark:text-slate-200">v{updateInfo?.currentVersion || '1.0.2'}</span>
                 {updateInfo?.ok && updateInfo.latestVersion && (
                   <>
                     {' '}· GitHub 最新版本：

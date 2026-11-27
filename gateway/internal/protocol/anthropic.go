@@ -80,7 +80,7 @@ func ToOpenAI(req *Request, model string) (map[string]any, error) {
 		}
 		msgs = append(msgs, converted...)
 	}
-	out["messages"] = msgs
+	out["messages"] = repairToolCallSequence(msgs)
 
 	if len(req.Tools) > 0 {
 		tools := make([]map[string]any, 0, len(req.Tools))
@@ -177,7 +177,6 @@ func MessageToOpenAI(m Message) ([]map[string]any, error) {
 		}
 	}
 
-	out := make([]map[string]any, 0, 2)
 	msg := map[string]any{"role": role}
 	if len(parts) == 1 {
 		// 单个文本块直接摊平成字符串，与 OpenAI 的常见写法一致
@@ -194,11 +193,95 @@ func MessageToOpenAI(m Message) ([]map[string]any, error) {
 	if len(toolCalls) > 0 {
 		msg["tool_calls"] = toolCalls
 	}
-	if len(parts) > 0 || len(toolCalls) > 0 {
-		out = append(out, msg)
+
+	out := make([]map[string]any, 0, len(toolMsgs)+1)
+	if role == "user" {
+		// OpenAI / Kimi 要求 assistant.tool_calls 后必须紧跟对应的 role=tool 消息；
+		// 当 Claude Code 把 tool_result 与 system-reminder / 用户文本放在同一条 user 消息中时，
+		// 必须先输出 toolMsgs，再输出 user 文本消息。
+		out = append(out, toolMsgs...)
+		if len(parts) > 0 || len(toolCalls) > 0 {
+			out = append(out, msg)
+		}
+	} else {
+		if len(parts) > 0 || len(toolCalls) > 0 {
+			out = append(out, msg)
+		}
+		out = append(out, toolMsgs...)
 	}
-	out = append(out, toolMsgs...)
 	return out, nil
+}
+
+// repairToolCallSequence 保证发送给上游的 OpenAI 消息序列严格满足：
+// 1. 每条带 tool_calls 的 assistant 消息之后，紧跟所有对应 tool_call_id 的 role=tool 消息；
+// 2. 若因客户端中断、502 重试或历史截断导致某个 tool_call_id 缺少回应，自动补齐占位 tool 消息；
+// 3. 丢弃没有对应前置 tool_call 的孤立 role=tool 消息，避免上游返回 HTTP 400。
+func repairToolCallSequence(msgs []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(msgs))
+	i := 0
+	for i < len(msgs) {
+		m := msgs[i]
+		role, _ := m["role"].(string)
+		if role == "tool" {
+			// 孤立的 tool 消息（前面没有对应的 assistant.tool_calls），直接丢弃
+			i++
+			continue
+		}
+		if role == "assistant" {
+			callIDs := extractToolCallIDs(m["tool_calls"])
+			if len(callIDs) > 0 {
+				out = append(out, m)
+				expected := make(map[string]bool, len(callIDs))
+				for _, id := range callIDs {
+					expected[id] = true
+				}
+				seen := make(map[string]bool, len(callIDs))
+				j := i + 1
+				for j < len(msgs) {
+					nextRole, _ := msgs[j]["role"].(string)
+					if nextRole != "tool" {
+						break
+					}
+					tid := Str(msgs[j]["tool_call_id"])
+					if expected[tid] && !seen[tid] {
+						seen[tid] = true
+						out = append(out, msgs[j])
+					}
+					j++
+				}
+				for _, id := range callIDs {
+					if !seen[id] {
+						out = append(out, map[string]any{
+							"role":         "tool",
+							"tool_call_id": id,
+							"content":      "[Tool execution was interrupted or omitted]",
+						})
+					}
+				}
+				i = j
+				continue
+			}
+		}
+		out = append(out, m)
+		i++
+	}
+	return out
+}
+
+func extractToolCallIDs(raw any) []string {
+	list, ok := raw.([]any)
+	if !ok || len(list) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(list))
+	for _, item := range list {
+		if m, ok := item.(map[string]any); ok {
+			if id := Str(m["id"]); id != "" {
+				ids = append(ids, id)
+			}
+		}
+	}
+	return ids
 }
 
 // SystemText 提取 system 字段（字符串或文本块数组）。

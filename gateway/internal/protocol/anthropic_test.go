@@ -97,6 +97,69 @@ func TestAnthropicToOpenAIToolRoundTrip(t *testing.T) {
 	]`)
 }
 
+// TestAnthropicToOpenAIToolResultBeforeUserText 验证当同一条 user 消息同时包含
+// tool_result 与文本块（如 Claude Code 的 system-reminder）时，role=tool 必须排在 role=user 前面。
+func TestAnthropicToOpenAIToolResultBeforeUserText(t *testing.T) {
+	req := &Request{
+		Messages: []Message{
+			{Role: "assistant", Content: json.RawMessage(`[
+				{"type":"tool_use","id":"Bash:0","name":"Bash","input":{"command":"ls"}}
+			]`)},
+			{Role: "user", Content: json.RawMessage(`[
+				{"type":"text","text":"<system-reminder>keep going</system-reminder>"},
+				{"type":"tool_result","tool_use_id":"Bash:0","content":"ok"}
+			]`)},
+		},
+	}
+	out, err := ToOpenAI(req, "kimi-k3.1-pro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonEq(t, out["messages"], `[
+		{
+			"role": "assistant",
+			"content": "",
+			"tool_calls": [{
+				"id": "Bash:0",
+				"type": "function",
+				"function": {"name":"Bash","arguments":"{\"command\":\"ls\"}"}
+			}]
+		},
+		{"role": "tool", "tool_call_id": "Bash:0", "content": "ok"},
+		{"role": "user", "content": "<system-reminder>keep going</system-reminder>"}
+	]`)
+}
+
+// TestAnthropicToOpenAIRepairsOrphanToolCall 验证中断或 502 遗留的未配对 tool_use
+// 会被自动补齐占位 role=tool，防止 Kimi 等严格校验上游报 HTTP 400。
+func TestAnthropicToOpenAIRepairsOrphanToolCall(t *testing.T) {
+	req := &Request{
+		Messages: []Message{
+			{Role: "assistant", Content: json.RawMessage(`[
+				{"type":"tool_use","id":"Bash:0","name":"Bash","input":{"command":"pwd"}}
+			]`)},
+			{Role: "user", Content: json.RawMessage(`"继续"`)},
+		},
+	}
+	out, err := ToOpenAI(req, "kimi-k3.1-pro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonEq(t, out["messages"], `[
+		{
+			"role": "assistant",
+			"content": "",
+			"tool_calls": [{
+				"id": "Bash:0",
+				"type": "function",
+				"function": {"name":"Bash","arguments":"{\"command\":\"pwd\"}"}
+			}]
+		},
+		{"role": "tool", "tool_call_id": "Bash:0", "content": "[Tool execution was interrupted or omitted]"},
+		{"role": "user", "content": "继续"}
+	]`)
+}
+
 // TestAnthropicToOpenAIImageAndToolChoice 覆盖图片（base64 / url）与
 // tool_choice 的三种形态。
 func TestAnthropicToOpenAIImageAndToolChoice(t *testing.T) {

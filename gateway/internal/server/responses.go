@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"codearts2api/internal/protocol"
 )
 
 // handleCodexResponses bridges OpenAI Responses API (/v1/responses) used by Codex CLI & Desktop App
@@ -55,7 +57,7 @@ func (s *Server) handleCodexResponses(w http.ResponseWriter, r *http.Request) {
 	}
 	stream, _ := body["stream"].(bool)
 
-	messages := convertResponsesInputToMessages(body)
+	messages := protocol.SanitizeOpenAIMessages(convertResponsesInputToMessages(body))
 	tools := convertResponsesTools(body)
 
 	chatPayload := map[string]any{
