@@ -160,6 +160,36 @@ func TestAnthropicToOpenAIRepairsOrphanToolCall(t *testing.T) {
 	]`)
 }
 
+// TestSanitizeOpenAIMessagesResponsesShape 验证 /v1/responses 传入的 []map[string]any 形态
+// tool_calls 也能正确补齐缺失的 tool 回应并丢弃孤立的 role=tool 消息。
+func TestSanitizeOpenAIMessagesResponsesShape(t *testing.T) {
+	in := []map[string]any{
+		{"role": "tool", "tool_call_id": "orphan_0", "content": "stale"},
+		{
+			"role":    "assistant",
+			"content": "",
+			"tool_calls": []map[string]any{
+				{"id": "call_1", "type": "function", "function": map[string]any{"name": "shell", "arguments": "{}"}},
+			},
+		},
+		{"role": "user", "content": "next"},
+	}
+	got := SanitizeOpenAIMessages(in)
+	jsonEq(t, got, `[
+		{
+			"role": "assistant",
+			"content": "",
+			"tool_calls": [{
+				"id": "call_1",
+				"type": "function",
+				"function": {"name":"shell","arguments":"{}"}
+			}]
+		},
+		{"role": "tool", "tool_call_id": "call_1", "content": "[Tool execution was interrupted or omitted]"},
+		{"role": "user", "content": "next"}
+	]`)
+}
+
 // TestAnthropicToOpenAIImageAndToolChoice 覆盖图片（base64 / url）与
 // tool_choice 的三种形态。
 func TestAnthropicToOpenAIImageAndToolChoice(t *testing.T) {

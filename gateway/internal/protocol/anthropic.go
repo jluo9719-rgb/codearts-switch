@@ -80,7 +80,7 @@ func ToOpenAI(req *Request, model string) (map[string]any, error) {
 		}
 		msgs = append(msgs, converted...)
 	}
-	out["messages"] = repairToolCallSequence(msgs)
+	out["messages"] = SanitizeOpenAIMessages(msgs)
 
 	if len(req.Tools) > 0 {
 		tools := make([]map[string]any, 0, len(req.Tools))
@@ -212,11 +212,11 @@ func MessageToOpenAI(m Message) ([]map[string]any, error) {
 	return out, nil
 }
 
-// repairToolCallSequence 保证发送给上游的 OpenAI 消息序列严格满足：
+// SanitizeOpenAIMessages 保证发送给上游的 OpenAI 消息序列严格满足：
 // 1. 每条带 tool_calls 的 assistant 消息之后，紧跟所有对应 tool_call_id 的 role=tool 消息；
 // 2. 若因客户端中断、502 重试或历史截断导致某个 tool_call_id 缺少回应，自动补齐占位 tool 消息；
 // 3. 丢弃没有对应前置 tool_call 的孤立 role=tool 消息，避免上游返回 HTTP 400。
-func repairToolCallSequence(msgs []map[string]any) []map[string]any {
+func SanitizeOpenAIMessages(msgs []map[string]any) []map[string]any {
 	out := make([]map[string]any, 0, len(msgs))
 	i := 0
 	for i < len(msgs) {
@@ -269,19 +269,34 @@ func repairToolCallSequence(msgs []map[string]any) []map[string]any {
 }
 
 func extractToolCallIDs(raw any) []string {
-	list, ok := raw.([]any)
-	if !ok || len(list) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(list))
-	for _, item := range list {
-		if m, ok := item.(map[string]any); ok {
+	switch list := raw.(type) {
+	case []any:
+		if len(list) == 0 {
+			return nil
+		}
+		ids := make([]string, 0, len(list))
+		for _, item := range list {
+			if m, ok := item.(map[string]any); ok {
+				if id := Str(m["id"]); id != "" {
+					ids = append(ids, id)
+				}
+			}
+		}
+		return ids
+	case []map[string]any:
+		if len(list) == 0 {
+			return nil
+		}
+		ids := make([]string, 0, len(list))
+		for _, m := range list {
 			if id := Str(m["id"]); id != "" {
 				ids = append(ids, id)
 			}
 		}
+		return ids
+	default:
+		return nil
 	}
-	return ids
 }
 
 // SystemText 提取 system 字段（字符串或文本块数组）。
