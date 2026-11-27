@@ -4,6 +4,7 @@
 
 **面向华为云 CodeArts（码道）的多智能体可视化切换控制台与 Tauri v2 独立窗口桌面客户端**
 
+[![LINUX DO 社区](https://img.shields.io/badge/Community-LINUX%20DO-1C1C1E?logo=linux&logoColor=white)](https://linux.do)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](./LICENSE)
 [![Tauri v2](https://img.shields.io/badge/Desktop-Tauri%20v2-24C8D8?logo=tauri&logoColor=white)](./src-tauri)
 [![Go 1.24](https://img.shields.io/badge/Gateway-Go%201.24-00ADD8?logo=go&logoColor=white)](./gateway)
